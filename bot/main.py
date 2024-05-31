@@ -89,7 +89,7 @@ def generate_main_menu():
             f"/start - Start the bot and create a new session.\n"
             f"/send - Send a transaction.\n"
             f"/add\\_co\\_signer - Add a co-signer.\n"
-            f"/test - Test the bot.\n"
+            f"/info - Current chat signer information.\n"
             f"/gen\\_keys - Generate new keys for the signer.\n"
             f"/import\\_keys - Use your own keys for the signer.\n"
             f"/private\\_key - Send your private key in a private message.\n")
@@ -123,18 +123,19 @@ def generate_keys(message: Message):
 
 @bot.message_handler(commands=["import_keys"])
 def import_keys(message: Message):
-    chat_id = message.chat.id
-    bot.send_message(chat_id, "Please send your private key.")
-    bot.register_next_step_handler(message, process_private_key)
+    user_id = message.from_user.id
+    bot.send_message(user_id, "Please send your private key. This will be kept confidential.")
+    bot.register_next_step_handler_by_chat_id(user_id, process_private_key)
+
 
 def process_private_key(message: Message):
-    chat_id = message.chat.id
     user_id = message.from_user.id
     private_key = message.text.strip()
 
     try:
         keypair = Keypair.from_secret(private_key)
         public_key = keypair.public_key
+        chat_id = process_states[user_id]["private_chat_id"]
         process_states[chat_id] = {
             "active": True,
             "original_signer": user_id,
@@ -145,8 +146,9 @@ def process_private_key(message: Message):
         }
         bot.send_message(chat_id, f"Your keys have been added. Public key: {public_key}\n\n{generate_main_menu()}", parse_mode="Markdown")
     except Exception as e:
-        bot.send_message(chat_id, "Invalid private key. Please try again.")
-        bot.register_next_step_handler(message, process_private_key)
+        bot.send_message(user_id, "Invalid private key. Please try again.")
+        bot.register_next_step_handler_by_chat_id(user_id, process_private_key)
+
 
 @bot.message_handler(commands=["private_key"])
 def send_private_key(message: Message):
@@ -192,20 +194,21 @@ def add_co_signer_generate_keys(message: Message):
     else:
         bot.reply_to(message, "You have already been added as a co-signer.")
 
-@bot.message_handler(commands=["import_keys_co_signer"])
 def add_co_signer_use_own_keys(message: Message):
     chat_id = message.chat.id
-    bot.send_message(chat_id, "Co-signer: Please send your private key.")
-    bot.register_next_step_handler(message, process_co_signer_private_key)
+    user_id = message.from_user.id
+    bot.send_message(user_id, "Co-signer: Please send your private key. This will be kept confidential.")
+    bot.register_next_step_handler_by_chat_id(user_id, process_co_signer_private_key)
+
 
 def process_co_signer_private_key(message: Message):
-    chat_id = message.chat.id
     user_id = message.from_user.id
     private_key = message.text.strip()
 
     try:
         keypair = Keypair.from_secret(private_key)
         public_key = keypair.public_key
+        chat_id = process_states[user_id]["private_chat_id"]
         if user_id not in process_states[chat_id]["public_keys"]:
             process_states[chat_id]["members"].append(user_id)
             process_states[chat_id]["public_keys"][user_id] = {"secret": private_key, "public_key": public_key}
@@ -215,8 +218,14 @@ def process_co_signer_private_key(message: Message):
         else:
             bot.reply_to(message, "You have already been added as a co-signer.")
     except Exception as e:
-        bot.send_message(chat_id, "Invalid private key. Please try again.")
-        bot.register_next_step_handler(message, process_co_signer_private_key)
+        bot.send_message(user_id, "Invalid private key. Please try again.")
+        bot.register_next_step_handler_by_chat_id(user_id, process_co_signer_private_key)
+
+@bot.message_handler(commands=["import_keys_co_signer"])
+def add_co_signer_use_own_keys(message: Message):
+    user_id = message.from_user.id
+    bot.send_message(user_id, "Co-signer: Please send your private key. This will be kept confidential.")
+    bot.register_next_step_handler_by_chat_id(user_id, process_co_signer_private_key)
 
 @bot.message_handler(commands=["verify"])
 def verify_members(message: Message):
